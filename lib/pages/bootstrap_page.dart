@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/app_spacing.dart';
 import '../core/app_text.dart';
+import '../data/favorite_store.dart';
 import '../services/permission_service.dart';
 import '../services/song_service.dart';
 import 'app_shell.dart';
@@ -28,6 +29,8 @@ class _BootstrapPageState extends State<BootstrapPage> {
     if (!granted) {
       throw const _PermissionDenied();
     }
+    await FavoriteStore.load();
+
     final songs = await SongService().refresh();
     await SongService().restore(songs);
   }
@@ -94,7 +97,7 @@ class _Splash extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
-            const Text('Musik', style: AppText.section),
+            const Text('Miply', style: AppText.section),
             const SizedBox(height: AppSpacing.sm),
             const Text('Bibliothek wird gelesen', style: AppText.itemSubtitle),
             const SizedBox(height: AppSpacing.xl),

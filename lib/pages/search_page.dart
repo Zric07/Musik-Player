@@ -180,6 +180,7 @@ class _SearchPageState extends State<SearchPage> {
                               isPlaying: isPlaying,
                               onTap: () => _songService.toggle(song, songs),
                               trailing: SongMenu(
+                                song: song,
                                 onSelected: (action) =>
                                     handleSongAction(context, action, song),
                               ),

@@ -4,6 +4,7 @@ import '../core/app_colors.dart';
 import '../core/app_spacing.dart';
 import '../core/app_text.dart';
 import '../core/responsive.dart';
+import '../data/favorite_store.dart';
 import '../models/collection.dart';
 import '../models/playlist.dart';
 import '../models/song.dart';
@@ -16,8 +17,12 @@ import '../widgets/loading_view.dart';
 import '../widgets/playlist_menu.dart';
 import '../widgets/playlist_name_dialog.dart';
 import '../widgets/collection_tile.dart';
+import '../widgets/playback_builder.dart';
 import '../widgets/playlist_tile.dart';
 import '../widgets/segmented_tabs.dart';
+import '../widgets/song_actions.dart';
+import '../widgets/song_menu.dart';
+import '../widgets/song_tile.dart';
 import 'collection_page.dart';
 import 'playlist_detail_page.dart';
 
@@ -45,8 +50,10 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   void _reload() {
+    if (!mounted) return;
     setState(() {
       _playlistsFuture = _playlistService.getPlaylists();
+      _songsFuture = _songService.getSongs();
     });
   }
 
@@ -85,7 +92,13 @@ class _LibraryPageState extends State<LibraryPage> {
               padding: EdgeInsets.fromLTRB(pad, 0, pad, AppSpacing.md),
               child: SegmentedTabs(
                 index: _tab,
-                labels: const ['Playlists', 'Alben', 'Interpreten'],
+                labels: const [
+                  'Playlists',
+                  'Favoriten',
+                  'Alben',
+                  'Interpreten',
+                  'Ordner',
+                ],
                 onChanged: (i) => setState(() => _tab = i),
               ),
             ),
@@ -94,8 +107,10 @@ class _LibraryPageState extends State<LibraryPage> {
                 padding: EdgeInsets.symmetric(horizontal: pad),
                 child: switch (_tab) {
                   0 => _buildList(),
-                  1 => _buildCollections(isAlbum: true),
-                  _ => _buildCollections(isAlbum: false),
+                  1 => _buildFavorites(),
+                  2 => _buildCollections(kind: 'Album'),
+                  3 => _buildCollections(kind: 'Interpret'),
+                  _ => _buildCollections(kind: 'Ordner'),
                 },
               ),
             ),
@@ -158,7 +173,7 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  Widget _buildCollections({required bool isAlbum}) {
+  Widget _buildCollections({required String kind}) {
     return FutureBuilder<List<Song>>(
       future: _songsFuture,
       builder: (context, snapshot) {
@@ -167,14 +182,22 @@ class _LibraryPageState extends State<LibraryPage> {
         }
 
         final songs = snapshot.data ?? const <Song>[];
-        final items = isAlbum
-            ? CollectionBuilder.albums(songs)
-            : CollectionBuilder.artists(songs);
+        final items = switch (kind) {
+          'Album' => CollectionBuilder.albums(songs),
+          'Interpret' => CollectionBuilder.artists(songs),
+          _ => CollectionBuilder.folders(songs),
+        };
+
+        final icon = switch (kind) {
+          'Album' => Icons.album_rounded,
+          'Interpret' => Icons.person_rounded,
+          _ => Icons.folder_rounded,
+        };
 
         if (items.isEmpty) {
           return EmptyState(
-            icon: isAlbum ? Icons.album_outlined : Icons.person_outline_rounded,
-            title: isAlbum ? 'Keine Alben' : 'Keine Interpreten',
+            icon: icon,
+            title: 'Noch nichts da',
             subtitle: 'Sobald Titel da sind, sortieren sie sich hier ein.',
           );
         }
@@ -184,17 +207,65 @@ class _LibraryPageState extends State<LibraryPage> {
           itemCount: items.length,
           itemBuilder: (context, i) => CollectionTile(
             collection: items[i],
-            icon: isAlbum ? Icons.album_rounded : Icons.person_rounded,
+            icon: icon,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute<void>(
                 builder: (_) => CollectionPage(
                   collection: items[i],
-                  kind: isAlbum ? 'Album' : 'Interpret',
+                  kind: kind,
                 ),
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFavorites() {
+    return FutureBuilder<List<Song>>(
+      future: _songsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingView();
+        }
+
+        final all = snapshot.data ?? const <Song>[];
+        final songs = all
+            .where((song) => FavoriteStore.contains(song.id))
+            .toList();
+
+        if (songs.isEmpty) {
+          return const EmptyState(
+            icon: Icons.favorite_border_rounded,
+            title: 'Noch keine Favoriten',
+            subtitle: 'Tippe im Titelmenü auf "Zu Favoriten".',
+          );
+        }
+
+        return PlaybackBuilder(
+          builder: (context, currentId, isPlaying) {
+            return ListView.builder(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+              itemCount: songs.length,
+              itemBuilder: (context, i) => SongTile(
+                song: songs[i],
+                isCurrent: currentId == songs[i].id,
+                isPlaying: isPlaying,
+                onTap: () => _songService.toggle(songs[i], songs),
+                trailing: SongMenu(
+                  song: songs[i],
+                  onSelected: (action) => handleSongAction(
+                    context,
+                    action,
+                    songs[i],
+                    onChanged: _reload,
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );

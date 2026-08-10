@@ -16,7 +16,7 @@ class MusicApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Musik',
+      title: 'Miply',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: const BootstrapPage(),

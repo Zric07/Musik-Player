@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../models/song.dart';
 import 'app_paths.dart';
+import 'audio_formats.dart';
 import 'id3_reader.dart';
 
 class MusicLibrary {
@@ -74,7 +75,7 @@ class MusicLibrary {
       }
 
       if (entry is! File) continue;
-      if (p.extension(entry.path).toLowerCase() != '.mp3') continue;
+      if (!AudioFormats.supports(p.extension(entry.path))) continue;
       if (!seen.add(entry.path)) continue;
 
       songs.add(await _readSong(entry, artwork));
@@ -83,6 +84,7 @@ class MusicLibrary {
 
   static Future<Song> _readSong(File file, Directory artwork) async {
     final fallback = p.basenameWithoutExtension(file.path);
+    final extension = p.extension(file.path).toLowerCase();
     final tags = await Id3Reader.read(file);
 
     var cover = '';
@@ -97,7 +99,7 @@ class MusicLibrary {
       artist: tags.artist ?? 'Unbekannt',
       album: tags.album ?? '',
       cover: cover,
-      duration: await Id3Reader.duration(file) ?? Duration.zero,
+      duration: await Id3Reader.duration(file, extension) ?? Duration.zero,
       lyrics: tags.lyrics ?? '',
       timedLyrics: tags.timedLyrics,
     );

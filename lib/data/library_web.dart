@@ -4,8 +4,10 @@ import 'package:file_selector/file_selector.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../models/song.dart';
+import 'audio_formats.dart';
 import 'id3_parser.dart';
 import 'mp3_duration.dart';
+import 'wav_duration.dart';
 import 'cover_cache.dart';
 
 class MusicLibrary {
@@ -20,13 +22,14 @@ class MusicLibrary {
   static Future<List<Song>> load() async => List.of(_songs);
 
   static Future<int> import() async {
-    const group = XTypeGroup(
+    final group = XTypeGroup(
       label: 'Musik',
-      extensions: ['mp3', 'wav'],
-      mimeTypes: ['audio/mpeg'],
+      extensions: AudioFormats.extensions
+          .map((extension) => extension.substring(1))
+          .toList(),
     );
 
-    final files = await openFiles(acceptedTypeGroups: const [group]);
+    final files = await openFiles(acceptedTypeGroups: [group]);
     if (files.isEmpty) return 0;
 
     var added = 0;
@@ -61,6 +64,7 @@ class MusicLibrary {
 
     final tags = Id3Parser.parse(bytes);
     final fallback = _withoutExtension(file.name);
+    final isWav = file.name.toLowerCase().endsWith('.wav');
 
     var cover = '';
     final picture = tags.picture;
@@ -74,7 +78,10 @@ class MusicLibrary {
       artist: tags.artist ?? 'Unbekannt',
       album: tags.album ?? '',
       cover: cover,
-      duration: Mp3Duration.estimate(bytes, bytes.length) ?? Duration.zero,
+      duration: (isWav
+              ? WavDuration.estimate(bytes, bytes.length)
+              : Mp3Duration.estimate(bytes, bytes.length)) ??
+          Duration.zero,
       lyrics: tags.lyrics ?? '',
       timedLyrics: tags.timedLyrics,
     );

@@ -176,7 +176,7 @@ class _RailBrand extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.md),
-          const Text('Musik', style: AppText.section),
+          const Text('Miply', style: AppText.section),
         ],
       ),
     );

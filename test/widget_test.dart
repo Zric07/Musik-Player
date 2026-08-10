@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:musik/core/app_colors.dart';
-import 'package:musik/core/formatting.dart';
-import 'package:musik/models/playlist.dart';
-import 'package:musik/models/song.dart';
-import 'package:musik/widgets/empty_state.dart';
+import 'package:miply/core/app_colors.dart';
+import 'package:miply/core/formatting.dart';
+import 'package:miply/models/playlist.dart';
+import 'package:miply/models/song.dart';
+import 'package:miply/widgets/empty_state.dart';
 
 void main() {
   group('formatDuration', () {

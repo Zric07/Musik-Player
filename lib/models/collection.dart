@@ -53,6 +53,47 @@ class CollectionBuilder {
     });
   }
 
+  static List<Collection> folders(List<Song> songs) {
+    final groups = <String, List<Song>>{};
+
+    for (final song in songs) {
+      groups.putIfAbsent(_folderOf(song.id), () => []).add(song);
+    }
+
+    final result = groups.entries
+        .map(
+          (entry) => Collection(
+            name: _lastSegment(entry.key),
+            subtitle: entry.key,
+            songs: entry.value,
+          ),
+        )
+        .toList();
+
+    result.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+    return result;
+  }
+
+  static String _folderOf(String path) {
+    final cut = _lastSeparator(path);
+    if (cut <= 0) return 'Gerät';
+    return path.substring(0, cut);
+  }
+
+  static String _lastSegment(String path) {
+    final cut = _lastSeparator(path);
+    if (cut < 0 || cut == path.length - 1) return path;
+    return path.substring(cut + 1);
+  }
+
+  static int _lastSeparator(String path) {
+    final slash = path.lastIndexOf('/');
+    final back = path.lastIndexOf('\\');
+    return slash > back ? slash : back;
+  }
+
   static List<Collection> _sorted(
     Map<String, List<Song>> groups,
     String Function(MapEntry<String, List<Song>>) subtitle,

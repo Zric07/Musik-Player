@@ -1,11 +1,17 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart' hide RepeatMode;
+import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../core/app_colors.dart';
 import '../core/app_spacing.dart';
 import '../core/app_text.dart';
 import '../core/responsive.dart';
+import '../data/favorite_store.dart';
+import '../models/playback.dart';
 import '../models/song.dart';
+import '../services/playlist_service.dart';
 import '../services/song_service.dart';
 import '../services/voice_commands.dart';
 import '../widgets/cover_art.dart';
@@ -20,14 +26,23 @@ class CarDrivePage extends StatefulWidget {
 }
 
 class _CarDrivePageState extends State<CarDrivePage> {
+  static const _settleDelay = Duration(milliseconds: 550);
+  static const _retryDelay = Duration(milliseconds: 250);
+
   final _speech = stt.SpeechToText();
   final _songService = SongService();
 
-  bool _listening = false;
-  bool _blocked = false;
+  Timer? _settle;
+  Timer? _retry;
 
+  bool _wanted = false;
+  bool _blocked = false;
+  bool _busy = false;
+
+  String _locale = 'de_DE';
   String _heard = '';
   String _feedback = '';
+  String _lastHandled = '';
 
   @override
   void initState() {
@@ -44,19 +59,24 @@ class _CarDrivePageState extends State<CarDrivePage> {
 
   @override
   void dispose() {
-    _listening = false;
+    _wanted = false;
+    _settle?.cancel();
+    _retry?.cancel();
     _speech.cancel();
     super.dispose();
   }
 
   Future<void> _start() async {
-    if (_listening || _blocked) return;
+    if (_wanted || _blocked) return;
 
     var available = false;
     try {
       available = await _speech.initialize(
-        onStatus: _onStatus,
-        onError: (_) => _resume(),
+        onStatus: (_) => _keepAlive(),
+        onError: (error) {
+          _say('Erkennung unterbrochen (${error.errorMsg}).');
+          _keepAlive();
+        },
       );
     } catch (_) {
       available = false;
@@ -72,72 +92,102 @@ class _CarDrivePageState extends State<CarDrivePage> {
       return;
     }
 
+    _locale = await _pickLocale();
+    if (!mounted) return;
+
     setState(() {
-      _listening = true;
+      _wanted = true;
       _heard = '';
     });
 
+    _retry = Timer.periodic(_retryDelay, (_) => _listen());
     await _listen();
   }
 
+  Future<String> _pickLocale() async {
+    try {
+      final locales = await _speech.locales();
+      for (final locale in locales) {
+        if (locale.localeId.startsWith('de')) return locale.localeId;
+      }
+
+      final system = await _speech.systemLocale();
+      if (system != null) return system.localeId;
+    } catch (_) {}
+
+    return 'de_DE';
+  }
+
   Future<void> _stop() async {
-    if (!_listening) return;
+    _wanted = false;
+    _retry?.cancel();
+    _settle?.cancel();
 
-    setState(() => _listening = false);
-    await _speech.stop();
+    await _speech.cancel();
+    if (mounted) setState(() {});
   }
 
-  void _onStatus(String status) {
-    if (status == 'listening') return;
-    _resume();
-  }
-
-  void _resume() {
-    if (!_listening || !mounted) return;
-    Future<void>.delayed(const Duration(milliseconds: 400), _listen);
+  void _keepAlive() {
+    if (!_wanted || !mounted) return;
+    if (!_speech.isListening) unawaited(_listen());
   }
 
   Future<void> _listen() async {
-    if (!_listening || !mounted || _speech.isListening) return;
+    if (!_wanted || !mounted) return;
+    if (_speech.isListening || _busy) return;
 
+    _busy = true;
     try {
       await _speech.listen(
-        onResult: (result) {
-          setState(() => _heard = result.recognizedWords);
-          if (result.finalResult) _handle(result.recognizedWords);
-        },
+        onResult: _onResult,
         listenOptions: stt.SpeechListenOptions(
-          localeId: 'de_DE',
+          localeId: _locale,
           partialResults: true,
-          cancelOnError: true,
-          listenMode: stt.ListenMode.confirmation,
-          pauseFor: const Duration(seconds: 3),
-          listenFor: const Duration(seconds: 30),
+          cancelOnError: false,
+          listenMode: stt.ListenMode.dictation,
+          pauseFor: const Duration(seconds: 2),
+          listenFor: const Duration(minutes: 2),
         ),
       );
     } catch (_) {
-      _say('Das Mikrofon ist gerade nicht erreichbar.');
+    } finally {
+      _busy = false;
     }
 
     if (mounted) setState(() {});
   }
 
-  Future<void> _toggle() async {
-    if (_listening) {
-      await _stop();
+  void _onResult(SpeechRecognitionResult result) {
+    final words = result.recognizedWords;
+    if (!mounted) return;
+
+    setState(() => _heard = words);
+
+    _settle?.cancel();
+
+    if (result.finalResult) {
+      _run(words);
       return;
     }
 
-    _blocked = false;
-    await _start();
+    _settle = Timer(_settleDelay, () => _run(words));
   }
 
-  Future<void> _handle(String spoken) async {
+  Future<void> _run(String spoken) async {
+    final text = VoiceCommands.normalize(spoken);
+    if (text.isEmpty || text == _lastHandled) return;
+
+    _lastHandled = text;
+    _settle?.cancel();
+
     final command = VoiceCommands.parse(spoken);
 
     switch (command.action) {
       case VoiceAction.play:
         await _playByName(command.query);
+
+      case VoiceAction.playPlaylist:
+        await _playPlaylist(command.query);
 
       case VoiceAction.resume:
         await _songService.resume();
@@ -155,9 +205,44 @@ class _CarDrivePageState extends State<CarDrivePage> {
         await _songService.prev();
         _say('Vorheriger Titel');
 
+      case VoiceAction.restart:
+        await _songService.restartSong();
+        _say('Von vorne');
+
+      case VoiceAction.louder:
+        await _songService.nudgeVolume(0.15);
+        _say('Lauter');
+
+      case VoiceAction.quieter:
+        await _songService.nudgeVolume(-0.15);
+        _say('Leiser');
+
+      case VoiceAction.shuffleOn:
+        await _songService.setShuffle(true);
+        _say('Zufall an');
+
+      case VoiceAction.shuffleOff:
+        await _songService.setShuffle(false);
+        _say('Zufall aus');
+
+      case VoiceAction.repeatOn:
+        await _songService.setRepeat(RepeatMode.all);
+        _say('Wiederholung an');
+
+      case VoiceAction.repeatOff:
+        await _songService.setRepeat(RepeatMode.off);
+        _say('Wiederholung aus');
+
+      case VoiceAction.favorite:
+        await _markFavorite();
+
       case VoiceAction.unknown:
-        await _playByName(VoiceCommands.normalize(spoken));
+        await _playByName(text);
     }
+
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      _lastHandled = '';
+    });
   }
 
   Future<void> _playByName(String query) async {
@@ -173,9 +258,70 @@ class _CarDrivePageState extends State<CarDrivePage> {
     _say('Spiele "${song.title}"');
   }
 
+  Future<void> _playPlaylist(String query) async {
+    final playlists = await PlaylistService().getPlaylists();
+    if (playlists.isEmpty) {
+      _say('Du hast noch keine Playlist.');
+      return;
+    }
+
+    final needle = VoiceCommands.normalize(query);
+    var best = playlists.first;
+    var bestScore = -1.0;
+
+    for (final playlist in playlists) {
+      final score = VoiceCommands.similarity(
+        VoiceCommands.normalize(playlist.title),
+        needle,
+      );
+      if (score > bestScore) {
+        bestScore = score;
+        best = playlist;
+      }
+    }
+
+    final full = await PlaylistService().getPlaylist(best.id);
+    final library = await _songService.getSongs();
+    final byId = {for (final song in library) song.id: song};
+
+    final songs = full.songs
+        .map((path) => byId[path])
+        .whereType<Song>()
+        .toList();
+
+    if (songs.isEmpty) {
+      _say('"${best.title}" ist leer.');
+      return;
+    }
+
+    await _songService.playList(songs, 0);
+    _say('Spiele Playlist "${best.title}"');
+  }
+
+  Future<void> _markFavorite() async {
+    final song = _songService.current;
+    if (song == null) {
+      _say('Gerade läuft nichts.');
+      return;
+    }
+
+    final added = await FavoriteStore.toggle(song.id);
+    _say(added ? 'Zu Favoriten' : 'Aus Favoriten entfernt');
+  }
+
   void _say(String message) {
     if (!mounted) return;
     setState(() => _feedback = message);
+  }
+
+  Future<void> _toggle() async {
+    if (_wanted) {
+      await _stop();
+      return;
+    }
+
+    _blocked = false;
+    await _start();
   }
 
   @override
@@ -206,7 +352,7 @@ class _CarDrivePageState extends State<CarDrivePage> {
               child: Text(
                 _statusLabel,
                 style: AppText.itemTitle.copyWith(
-                  color: _listening ? AppColors.accent : AppColors.textDim,
+                  color: _wanted ? AppColors.accent : AppColors.textDim,
                 ),
               ),
             ),
@@ -226,10 +372,13 @@ class _CarDrivePageState extends State<CarDrivePage> {
 
   String get _statusLabel {
     if (_blocked) return 'Mikrofon nicht verfügbar';
-    return _listening ? 'Ich höre zu …' : 'Mikrofon pausiert';
+    if (!_wanted) return 'Mikrofon pausiert';
+    return _speech.isListening ? 'Ich höre zu …' : 'Starte Mikrofon …';
   }
 
   Widget _buildMicButton() {
+    final live = _wanted && _speech.isListening;
+
     return GestureDetector(
       onTap: _toggle,
       child: AnimatedContainer(
@@ -238,8 +387,8 @@ class _CarDrivePageState extends State<CarDrivePage> {
         height: 132,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: _listening ? AppColors.accent : AppColors.surfaceHi,
-          boxShadow: _listening
+          color: _wanted ? AppColors.accent : AppColors.surfaceHi,
+          boxShadow: live
               ? [
                   BoxShadow(
                     color: AppColors.accent.withValues(alpha: 0.45),
@@ -250,9 +399,9 @@ class _CarDrivePageState extends State<CarDrivePage> {
               : const [],
         ),
         child: Icon(
-          _listening ? Icons.mic_rounded : Icons.mic_none_rounded,
+          _wanted ? Icons.mic_rounded : Icons.mic_none_rounded,
           size: 54,
-          color: _listening ? AppColors.onAccent : AppColors.textDim,
+          color: _wanted ? AppColors.onAccent : AppColors.textDim,
         ),
       ),
     );
@@ -339,11 +488,17 @@ class _CarDrivePageState extends State<CarDrivePage> {
 
   Widget _buildHints() {
     const hints = [
-      'Spiele Bohemian Rhapsody ab',
+      'Spiele Africa ab',
+      'Spiele Playlist Autofahrt',
       'Pause',
       'Weiter',
       'Zurück',
-      'Weiterspielen',
+      'Von vorne',
+      'Lauter',
+      'Leiser',
+      'Zufall an',
+      'Wiederholung aus',
+      'Das gefällt mir',
     ];
 
     return Wrap(

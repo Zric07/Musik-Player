@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:musik/models/song.dart';
-import 'package:musik/services/voice_commands.dart';
+import 'package:miply/models/song.dart';
+import 'package:miply/services/voice_commands.dart';
 
 void main() {
   group('parse', () {

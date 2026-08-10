@@ -130,6 +130,7 @@ class CollectionPage extends StatelessWidget {
                     isPlaying: isPlaying,
                     onTap: () => service.toggle(songs[i], songs),
                     trailing: SongMenu(
+                      song: songs[i],
                       onSelected: (action) =>
                           handleSongAction(context, action, songs[i]),
                     ),

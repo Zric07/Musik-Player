@@ -1,6 +1,22 @@
 import '../models/song.dart';
 
-enum VoiceAction { play, resume, pause, next, previous, unknown }
+enum VoiceAction {
+  play,
+  playPlaylist,
+  resume,
+  pause,
+  next,
+  previous,
+  restart,
+  louder,
+  quieter,
+  shuffleOn,
+  shuffleOff,
+  repeatOn,
+  repeatOff,
+  favorite,
+  unknown,
+}
 
 class VoiceCommand {
   final VoiceAction action;
@@ -12,6 +28,13 @@ class VoiceCommand {
 class VoiceCommands {
   VoiceCommands._();
 
+  static const List<String> _playlistPrefixes = [
+    'spiele playlist',
+    'spiel playlist',
+    'starte playlist',
+    'playlist',
+  ];
+
   static const List<String> _playPrefixes = [
     'spiele',
     'spiel',
@@ -19,55 +42,21 @@ class VoiceCommands {
     'start',
     'play',
     'hoere',
+    'leg auf',
   ];
 
   static const List<String> _fillers = [
-    'lied',
     'das lied',
     'den song',
+    'den titel',
+    'die musik',
+    'lied',
     'song',
     'titel',
-    'den titel',
+    'musik',
     'mir',
     'bitte',
-  ];
-
-  static const List<String> _resumeWords = [
-    'weiterspielen',
-    'weiter spielen',
-    'weitermachen',
-    'weiter machen',
-    'fortsetzen',
-    'fortfahren',
-    'abspielen',
-    'wiedergabe',
-  ];
-
-  static const List<String> _pauseWords = [
-    'pause',
-    'pausier',
-    'stopp',
-    'stop',
-    'anhalten',
-    'halt an',
-    'ruhe',
-  ];
-
-  static const List<String> _nextWords = [
-    'naechst',
-    'weiter',
-    'ueberspring',
-    'skip',
-    'vorwaerts',
-    'vor',
-  ];
-
-  static const List<String> _previousWords = [
-    'zurueck',
-    'vorherig',
-    'davor',
-    'letztes',
-    'nochmal',
+    'mal',
   ];
 
   static const List<String> _resumeAfterPrefix = [
@@ -76,40 +65,76 @@ class VoiceCommands {
     'wieder',
     'los',
     'ab',
+    'musik',
+  ];
+
+  static const List<List<String>> _vocabulary = [
+    ['weiterspielen', 'weiter spielen', 'weitermachen', 'fortsetzen',
+      'fortfahren', 'wiedergabe fortsetzen'],
+    ['pause', 'pausier', 'stopp', 'stop', 'anhalten', 'halt an', 'ruhe',
+      'sei still', 'aus machen'],
+    ['von vorne', 'von vorn', 'neu starten', 'noch mal von vorne',
+      'nochmal von vorne', 'zum anfang'],
+    ['zufall aus', 'shuffle aus', 'zufallswiedergabe aus', 'der reihe nach'],
+    ['zufall', 'zufaellig', 'shuffle', 'mischen', 'misch', 'durcheinander'],
+    ['wiederholung aus', 'keine wiederholung', 'schleife aus', 'loop aus'],
+    ['wiederhol', 'schleife', 'loop', 'endlos'],
+    ['lauter', 'mach lauter', 'volle lautstaerke', 'voll aufdrehen'],
+    ['leiser', 'mach leiser', 'leise'],
+    ['gefaellt mir', 'favorit', 'merken', 'daumen hoch', 'zu favoriten'],
+    ['zurueck', 'vorherig', 'davor', 'letztes lied', 'nochmal'],
+    ['naechst', 'weiter', 'ueberspring', 'skip', 'vorwaerts', 'vor'],
+  ];
+
+  static const List<VoiceAction> _actions = [
+    VoiceAction.resume,
+    VoiceAction.pause,
+    VoiceAction.restart,
+    VoiceAction.shuffleOff,
+    VoiceAction.shuffleOn,
+    VoiceAction.repeatOff,
+    VoiceAction.repeatOn,
+    VoiceAction.louder,
+    VoiceAction.quieter,
+    VoiceAction.favorite,
+    VoiceAction.previous,
+    VoiceAction.next,
   ];
 
   static VoiceCommand parse(String spoken) {
     final text = normalize(spoken);
     if (text.isEmpty) return const VoiceCommand(VoiceAction.unknown);
 
-    if (_hasPlayPrefix(text)) {
-      final query = _queryAfterPrefix(text);
+    final playlist = _after(text, _playlistPrefixes);
+    if (playlist != null && playlist.isNotEmpty) {
+      return VoiceCommand(VoiceAction.playPlaylist, query: playlist);
+    }
 
+    final control = _controlOf(text);
+    final query = _after(text, _playPrefixes);
+
+    if (query != null) {
       if (query.isEmpty || _resumeAfterPrefix.contains(query)) {
         return const VoiceCommand(VoiceAction.resume);
+      }
+
+      final inner = _controlOf(query);
+      if (inner != VoiceAction.unknown && query.split(' ').length <= 2) {
+        return VoiceCommand(inner);
       }
 
       return VoiceCommand(VoiceAction.play, query: query);
     }
 
-    final control = _controlOf(text);
     if (control != VoiceAction.unknown) return VoiceCommand(control);
 
     return const VoiceCommand(VoiceAction.unknown);
   }
 
-  static bool _hasPlayPrefix(String text) {
-    for (final prefix in _playPrefixes) {
-      if (text == prefix || text.startsWith('$prefix ')) return true;
-    }
-    return false;
-  }
-
   static VoiceAction _controlOf(String text) {
-    if (_hasWord(text, _resumeWords)) return VoiceAction.resume;
-    if (_hasWord(text, _pauseWords)) return VoiceAction.pause;
-    if (_hasWord(text, _previousWords)) return VoiceAction.previous;
-    if (_hasWord(text, _nextWords)) return VoiceAction.next;
+    for (var i = 0; i < _vocabulary.length; i++) {
+      if (_hasWord(text, _vocabulary[i])) return _actions[i];
+    }
     return VoiceAction.unknown;
   }
 
@@ -122,9 +147,9 @@ class VoiceCommands {
     return false;
   }
 
-  static String _queryAfterPrefix(String text) {
-    for (final prefix in _playPrefixes) {
-      if (!text.startsWith('$prefix ') && text != prefix) continue;
+  static String? _after(String text, List<String> prefixes) {
+    for (final prefix in prefixes) {
+      if (text != prefix && !text.startsWith('$prefix ')) continue;
 
       var rest = text == prefix ? '' : text.substring(prefix.length + 1);
       rest = _stripEnd(rest, ' ab');
@@ -140,7 +165,7 @@ class VoiceCommands {
 
       return rest.trim();
     }
-    return '';
+    return null;
   }
 
   static String _stripEnd(String text, String suffix) {

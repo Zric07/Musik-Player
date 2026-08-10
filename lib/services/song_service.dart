@@ -252,6 +252,10 @@ class SongService {
     _modeController.add(null);
   }
 
+  Future<void> nudgeVolume(double step) => setVolume(_volume + step);
+
+  Future<void> restartSong() => player.seek(Duration.zero);
+
   Future<void> setVolume(double value) async {
     _volume = value.clamp(0.0, 1.0);
     await player.setVolume(_volume);

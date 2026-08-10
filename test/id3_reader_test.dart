@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:musik/data/id3_reader.dart';
+import 'package:miply/data/id3_reader.dart';
 
 Uint8List _syncSafe(int value) {
   return Uint8List.fromList([

@@ -227,8 +227,13 @@ class _HomePageState extends State<HomePage> {
                 isPlaying: isPlaying,
                 onTap: () => _songService.toggle(songs[i], songs),
                 trailing: SongMenu(
-                  onSelected: (action) =>
-                      handleSongAction(context, action, songs[i]),
+                  song: songs[i],
+                  onSelected: (action) => handleSongAction(
+                    context,
+                    action,
+                    songs[i],
+                    onChanged: _load,
+                  ),
                 ),
               ),
             );

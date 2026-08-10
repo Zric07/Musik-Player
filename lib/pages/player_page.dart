@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 
 import '../core/app_colors.dart';
 import '../core/app_spacing.dart';
 import '../core/app_text.dart';
 import '../core/formatting.dart';
+import '../models/playback.dart';
 import '../models/song.dart';
 import '../services/song_service.dart';
 import '../widgets/cover_art.dart';
@@ -58,7 +58,9 @@ class _PlayerPageState extends State<PlayerPage> {
                   _buildProgress(),
                   const SizedBox(height: AppSpacing.md),
                   _buildControls(),
-                  const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.sm),
+                  _buildVolume(),
+                  const SizedBox(height: AppSpacing.sm),
                   _buildFooter(),
                   const SizedBox(height: AppSpacing.lg),
                 ],
@@ -225,34 +227,83 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   Widget _buildControls() {
-    final isLooping = _service.loopMode == LoopMode.one;
+    return StreamBuilder<void>(
+      stream: _service.modeStream,
+      builder: (context, _) {
+        final repeat = _service.repeat;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SoftIconButton(
-          icon: isLooping ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-          tooltip: 'Titel wiederholen',
-          active: isLooping,
-          onPressed: _toggleLoop,
-        ),
-        const SizedBox(width: AppSpacing.lg),
-        SoftIconButton(
-          icon: Icons.skip_previous_rounded,
-          onPressed: _service.hasPrev ? _service.prev : null,
-          size: 52,
-        ),
-        const SizedBox(width: AppSpacing.md),
-        _buildPlayButton(),
-        const SizedBox(width: AppSpacing.md),
-        SoftIconButton(
-          icon: Icons.skip_next_rounded,
-          onPressed: _service.hasNext ? _service.next : null,
-          size: 52,
-        ),
-        const SizedBox(width: AppSpacing.lg),
-        const SizedBox(width: 42),
-      ],
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            SoftIconButton(
+              icon: Icons.shuffle_rounded,
+              tooltip: _service.shuffle
+                  ? 'Zufall aus'
+                  : 'Zufällige Reihenfolge',
+              active: _service.shuffle,
+              onPressed: () => _service.setShuffle(!_service.shuffle),
+            ),
+            SoftIconButton(
+              icon: Icons.skip_previous_rounded,
+              onPressed: _service.hasPrev ? _service.prev : null,
+              size: 52,
+            ),
+            _buildPlayButton(),
+            SoftIconButton(
+              icon: Icons.skip_next_rounded,
+              onPressed: _service.hasNext ? _service.next : null,
+              size: 52,
+            ),
+            SoftIconButton(
+              icon: repeat == RepeatMode.one
+                  ? Icons.repeat_one_rounded
+                  : Icons.repeat_rounded,
+              tooltip: repeat.next.label,
+              active: repeat != RepeatMode.off,
+              onPressed: () => _service.setRepeat(repeat.next),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildVolume() {
+    return StreamBuilder<void>(
+      stream: _service.modeStream,
+      builder: (context, _) {
+        return Row(
+          children: [
+            const Icon(
+              Icons.volume_down_rounded,
+              size: 18,
+              color: AppColors.textFaint,
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 5,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 12,
+                  ),
+                ),
+                child: Slider(
+                  value: _service.volume,
+                  onChanged: _service.setVolume,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.volume_up_rounded,
+              size: 18,
+              color: AppColors.textFaint,
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -281,13 +332,6 @@ class _PlayerPageState extends State<PlayerPage> {
     );
   }
 
-  Future<void> _toggleLoop() async {
-    final next = _service.loopMode == LoopMode.one
-        ? LoopMode.off
-        : LoopMode.one;
-    await _service.setLoopMode(next);
-    if (mounted) setState(() {});
-  }
 }
 
 class _WhitePlayButton extends StatelessWidget {

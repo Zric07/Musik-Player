@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../models/song.dart';
 import 'id3_parser.dart';
+import 'mp3_duration.dart';
 import 'cover_cache.dart';
 
 class MusicLibrary {
@@ -21,7 +22,7 @@ class MusicLibrary {
   static Future<int> import() async {
     const group = XTypeGroup(
       label: 'Musik',
-      extensions: ['mp3'],
+      extensions: ['mp3', 'wav'],
       mimeTypes: ['audio/mpeg'],
     );
 
@@ -73,6 +74,7 @@ class MusicLibrary {
       artist: tags.artist ?? 'Unbekannt',
       album: tags.album ?? '',
       cover: cover,
+      duration: Mp3Duration.estimate(bytes, bytes.length) ?? Duration.zero,
       lyrics: tags.lyrics ?? '',
       timedLyrics: tags.timedLyrics,
     );

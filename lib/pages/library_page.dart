@@ -4,15 +4,21 @@ import '../core/app_colors.dart';
 import '../core/app_spacing.dart';
 import '../core/app_text.dart';
 import '../core/responsive.dart';
+import '../models/collection.dart';
 import '../models/playlist.dart';
+import '../models/song.dart';
 import '../services/cover_picker.dart';
 import '../services/playlist_service.dart';
+import '../services/song_service.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/playlist_menu.dart';
 import '../widgets/playlist_name_dialog.dart';
+import '../widgets/collection_tile.dart';
 import '../widgets/playlist_tile.dart';
+import '../widgets/segmented_tabs.dart';
+import 'collection_page.dart';
 import 'playlist_detail_page.dart';
 
 class LibraryPage extends StatefulWidget {
@@ -24,13 +30,18 @@ class LibraryPage extends StatefulWidget {
 
 class _LibraryPageState extends State<LibraryPage> {
   final _playlistService = PlaylistService();
+  final _songService = SongService();
 
   late Future<List<Playlist>> _playlistsFuture;
+  late Future<List<Song>> _songsFuture;
+
+  int _tab = 0;
 
   @override
   void initState() {
     super.initState();
     _playlistsFuture = _playlistService.getPlaylists();
+    _songsFuture = _songService.getSongs();
   }
 
   void _reload() {
@@ -61,18 +72,31 @@ class _LibraryPageState extends State<LibraryPage> {
                   const Expanded(
                     child: Text('Deine Bibliothek', style: AppText.title),
                   ),
-                  SoftIconButton(
-                    icon: Icons.add_rounded,
-                    tooltip: 'Neue Playlist',
-                    onPressed: _showCreateDialog,
-                  ),
+                  if (_tab == 0)
+                    SoftIconButton(
+                      icon: Icons.add_rounded,
+                      tooltip: 'Neue Playlist',
+                      onPressed: _showCreateDialog,
+                    ),
                 ],
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(pad, 0, pad, AppSpacing.md),
+              child: SegmentedTabs(
+                index: _tab,
+                labels: const ['Playlists', 'Alben', 'Interpreten'],
+                onChanged: (i) => setState(() => _tab = i),
               ),
             ),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: pad),
-                child: _buildList(),
+                child: switch (_tab) {
+                  0 => _buildList(),
+                  1 => _buildCollections(isAlbum: true),
+                  _ => _buildCollections(isAlbum: false),
+                },
               ),
             ),
           ],
@@ -128,6 +152,48 @@ class _LibraryPageState extends State<LibraryPage> {
                 ),
               );
             },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCollections({required bool isAlbum}) {
+    return FutureBuilder<List<Song>>(
+      future: _songsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingView();
+        }
+
+        final songs = snapshot.data ?? const <Song>[];
+        final items = isAlbum
+            ? CollectionBuilder.albums(songs)
+            : CollectionBuilder.artists(songs);
+
+        if (items.isEmpty) {
+          return EmptyState(
+            icon: isAlbum ? Icons.album_outlined : Icons.person_outline_rounded,
+            title: isAlbum ? 'Keine Alben' : 'Keine Interpreten',
+            subtitle: 'Sobald Titel da sind, sortieren sie sich hier ein.',
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+          itemCount: items.length,
+          itemBuilder: (context, i) => CollectionTile(
+            collection: items[i],
+            icon: isAlbum ? Icons.album_rounded : Icons.person_rounded,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => CollectionPage(
+                  collection: items[i],
+                  kind: isAlbum ? 'Album' : 'Interpret',
+                ),
+              ),
+            ),
           ),
         );
       },

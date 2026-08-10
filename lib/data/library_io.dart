@@ -85,6 +85,7 @@ class MusicLibrary {
       artist: tags.artist ?? 'Unbekannt',
       album: tags.album ?? '',
       cover: cover,
+      duration: await Id3Reader.duration(file) ?? Duration.zero,
       lyrics: tags.lyrics ?? '',
       timedLyrics: tags.timedLyrics,
     );

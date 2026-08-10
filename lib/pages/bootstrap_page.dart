@@ -28,7 +28,8 @@ class _BootstrapPageState extends State<BootstrapPage> {
     if (!granted) {
       throw const _PermissionDenied();
     }
-    await SongService().refresh();
+    final songs = await SongService().refresh();
+    await SongService().restore(songs);
   }
 
   void _retry() {

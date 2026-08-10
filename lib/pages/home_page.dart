@@ -5,6 +5,7 @@ import '../core/app_spacing.dart';
 import '../core/app_text.dart';
 import '../core/formatting.dart';
 import '../core/responsive.dart';
+import '../models/playback.dart';
 import '../models/playlist.dart';
 import '../models/song.dart';
 import '../services/playlist_service.dart';
@@ -16,9 +17,12 @@ import '../widgets/loading_view.dart';
 import '../widgets/playback_builder.dart';
 import '../widgets/playlist_cover.dart';
 import '../widgets/section_header.dart';
+import '../widgets/song_actions.dart';
+import '../widgets/song_menu.dart';
 import '../widgets/song_tile.dart';
 import 'playlist_detail_page.dart';
 import 'queue_page.dart';
+import 'stats_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -32,6 +36,7 @@ class _HomePageState extends State<HomePage> {
   final _playlistService = PlaylistService();
 
   late Future<List<Song>> _songsFuture;
+  SongOrder _order = SongOrder.title;
   late Future<List<Playlist>> _playlistsFuture;
 
   @override
@@ -117,6 +122,14 @@ class _HomePageState extends State<HomePage> {
               onPressed: _import,
             ),
           SoftIconButton(
+            icon: Icons.insights_outlined,
+            tooltip: 'Deine Statistik',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const StatsPage()),
+            ),
+          ),
+          SoftIconButton(
             icon: Icons.playlist_play_rounded,
             tooltip: 'Warteschlange',
             onPressed: () => Navigator.push(
@@ -181,7 +194,7 @@ class _HomePageState extends State<HomePage> {
           );
         }
 
-        final songs = snapshot.data ?? const <Song>[];
+        final songs = _sorted(snapshot.data ?? const <Song>[]);
 
         if (songs.isEmpty) {
           return SliverToBoxAdapter(
@@ -213,12 +226,41 @@ class _HomePageState extends State<HomePage> {
                 isCurrent: currentId == songs[i].id,
                 isPlaying: isPlaying,
                 onTap: () => _songService.toggle(songs[i], songs),
+                trailing: SongMenu(
+                  onSelected: (action) =>
+                      handleSongAction(context, action, songs[i]),
+                ),
               ),
             );
           },
         );
       },
     );
+  }
+
+  List<Song> _sorted(List<Song> songs) {
+    final list = List.of(songs);
+
+    int byText(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+
+    switch (_order) {
+      case SongOrder.title:
+        list.sort((a, b) => byText(a.title, b.title));
+      case SongOrder.artist:
+        list.sort((a, b) {
+          final result = byText(a.artist, b.artist);
+          return result != 0 ? result : byText(a.title, b.title);
+        });
+      case SongOrder.album:
+        list.sort((a, b) {
+          final result = byText(a.album, b.album);
+          return result != 0 ? result : byText(a.title, b.title);
+        });
+      case SongOrder.duration:
+        list.sort((a, b) => b.duration.compareTo(a.duration));
+    }
+
+    return list;
   }
 
   Future<void> _import() async {
@@ -229,6 +271,43 @@ class _HomePageState extends State<HomePage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(songCountLabel(added) + ' hinzugefügt')),
     );
+  }
+
+  Future<void> _chooseOrder() async {
+    final chosen = await showModalBottomSheet<SongOrder>(
+      context: context,
+      backgroundColor: AppColors.surfaceHi,
+      constraints: const BoxConstraints(maxWidth: 480),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: AppSpacing.lg),
+            const Text('Sortieren nach', style: AppText.section),
+            const SizedBox(height: AppSpacing.md),
+            for (final option in SongOrder.values)
+              ListTile(
+                title: Text(option.label, style: AppText.itemTitle),
+                trailing: option == _order
+                    ? const Icon(
+                        Icons.check_rounded,
+                        color: AppColors.accent,
+                        size: 20,
+                      )
+                    : null,
+                onTap: () => Navigator.pop(sheetContext, option),
+              ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+        ),
+      ),
+    );
+
+    if (chosen == null || !mounted) return;
+    setState(() => _order = chosen);
   }
 
   void _open(Playlist playlist) {

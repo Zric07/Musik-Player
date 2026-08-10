@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/app_spacing.dart';
 import '../core/app_text.dart';
+import '../core/formatting.dart';
 import '../models/song.dart';
 import 'cover_art.dart';
 import 'hoverable.dart';
@@ -71,6 +72,10 @@ class SongTile extends StatelessWidget {
               if (isCurrent) ...[
                 const SizedBox(width: AppSpacing.sm),
                 PlayingBars(animate: isPlaying),
+              ],
+              if (song.hasDuration) ...[
+                const SizedBox(width: AppSpacing.md),
+                Text(formatDuration(song.duration), style: AppText.caption),
               ],
               if (trailing != null) ...[
                 const SizedBox(width: AppSpacing.xs),

@@ -12,6 +12,8 @@ import '../widgets/empty_state.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/playback_builder.dart';
 import '../widgets/playlist_tile.dart';
+import '../widgets/song_actions.dart';
+import '../widgets/song_menu.dart';
 import '../widgets/song_tile.dart';
 import 'playlist_detail_page.dart';
 
@@ -177,6 +179,10 @@ class _SearchPageState extends State<SearchPage> {
                               isCurrent: currentId == song.id,
                               isPlaying: isPlaying,
                               onTap: () => _songService.toggle(song, songs),
+                              trailing: SongMenu(
+                                onSelected: (action) =>
+                                    handleSongAction(context, action, song),
+                              ),
                             ),
                         ],
                       );

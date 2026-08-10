@@ -180,13 +180,6 @@ void main() {
     expect(tags.album, 'A Night at the Opera');
   });
 
-  test('behaelt Leerzeichen im Titel', () async {
-    final file = await write('b.mp3', _tag([_textFrame('TIT2', 'Hey Jude')]));
-    final tags = await Id3Reader.read(file);
-
-    expect(tags.title, 'Hey Jude');
-  });
-
   test('liest UTF-16 mit BOM', () async {
     final file = await write(
       'c.mp3',

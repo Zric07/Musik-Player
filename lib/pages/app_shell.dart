@@ -1,4 +1,7 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/app_colors.dart';
 import '../core/responsive.dart';
@@ -24,6 +27,27 @@ class _AppShellState extends State<AppShell> {
   int _tab = 0;
 
   final _pages = const [HomePage(), SearchPage(), LibraryPage()];
+
+  AppLifecycleListener? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onPause: _songService.persist,
+      onDetach: _songService.persist,
+      onExitRequested: () async {
+        await _songService.persist();
+        return AppExitResponse.exit;
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    super.dispose();
+  }
 
   static const _navItems = [
     NavItem(

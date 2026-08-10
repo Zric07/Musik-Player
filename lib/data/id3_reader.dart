@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'id3_parser.dart';
+import 'mp3_duration.dart';
 
 class Id3Reader {
   Id3Reader._();
@@ -35,4 +36,19 @@ class Id3Reader {
   }
 
   static AudioTags readBytes(Uint8List bytes) => Id3Parser.parse(bytes);
+
+  static Future<Duration?> duration(File file) async {
+    RandomAccessFile? handle;
+    try {
+      handle = await file.open();
+      final head = await handle.read(_probe);
+      return Mp3Duration.estimate(head, await file.length());
+    } catch (_) {
+      return null;
+    } finally {
+      await handle?.close();
+    }
+  }
+
+  static const int _probe = 256 * 1024;
 }

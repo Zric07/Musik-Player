@@ -6,6 +6,7 @@ class Song {
   final String artist;
   final String album;
   final String cover;
+  final Duration duration;
   final String lyrics;
   final List<LyricLine> timedLyrics;
 
@@ -15,11 +16,14 @@ class Song {
     required this.artist,
     this.album = '',
     this.cover = '',
+    this.duration = Duration.zero,
     this.lyrics = '',
     this.timedLyrics = const [],
   });
 
   bool get hasCover => cover.isNotEmpty;
+
+  bool get hasDuration => duration > Duration.zero;
 
   bool get hasLyrics => lyrics.isNotEmpty || timedLyrics.isNotEmpty;
 

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/song.dart';
@@ -19,7 +20,18 @@ class MusicLibrary {
   static Future<int> import() async => 0;
 
   static Future<void> setSource(AudioPlayer player, Song song) async {
-    await player.setFilePath(song.id);
+    await player.setFilePath(song.id, tag: _tag(song));
+  }
+
+  static MediaItem _tag(Song song) {
+    return MediaItem(
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      album: song.album.isEmpty ? null : song.album,
+      duration: song.hasDuration ? song.duration : null,
+      artUri: song.hasCover ? Uri.file(song.cover) : null,
+    );
   }
 
   static Future<List<Song>> load() async {

@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import '../core/app_colors.dart';
 import '../core/responsive.dart';
 import '../models/song.dart';
+import '../services/media_controls.dart';
 import '../services/song_service.dart';
 import '../widgets/app_navigation.dart';
 import '../widgets/mini_player.dart';
+import 'cardrive_page.dart';
 import 'home_page.dart';
 import 'library_page.dart';
 import 'player_page.dart';
@@ -26,7 +28,6 @@ class _AppShellState extends State<AppShell> {
 
   int _tab = 0;
 
-  final _pages = const [HomePage(), SearchPage(), LibraryPage()];
 
   AppLifecycleListener? _lifecycle;
 
@@ -38,6 +39,7 @@ class _AppShellState extends State<AppShell> {
       onDetach: _songService.persist,
       onExitRequested: () async {
         await _songService.persist();
+        await MediaControls.clear();
         return AppExitResponse.exit;
       },
     );
@@ -64,6 +66,11 @@ class _AppShellState extends State<AppShell> {
       label: 'Bibliothek',
       icon: Icons.library_music_outlined,
       activeIcon: Icons.library_music_rounded,
+    ),
+    NavItem(
+      label: 'Cardrive',
+      icon: Icons.directions_car_outlined,
+      activeIcon: Icons.directions_car_rounded,
     ),
   ];
 
@@ -96,7 +103,15 @@ class _AppShellState extends State<AppShell> {
                     onChanged: (i) => setState(() => _tab = i),
                   ),
                 Expanded(
-                  child: IndexedStack(index: _tab, children: _pages),
+                  child: IndexedStack(
+                    index: _tab,
+                    children: [
+                      const HomePage(),
+                      const SearchPage(),
+                      const LibraryPage(),
+                      CarDrivePage(active: _tab == 3),
+                    ],
+                  ),
                 ),
               ],
             ),

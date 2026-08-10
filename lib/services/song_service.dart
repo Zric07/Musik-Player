@@ -8,6 +8,7 @@ import '../data/play_history.dart';
 import '../data/player_state_store.dart';
 import '../models/playback.dart';
 import '../models/song.dart';
+import 'media_controls.dart';
 
 class SongService {
   static final SongService _instance = SongService._();
@@ -37,7 +38,16 @@ class SongService {
   DateTime? _since;
   bool _reachedEnd = false;
 
+  int _pushedSecond = -1;
+
   SongService._() {
+    MediaControls.bind(
+      onPlay: resume,
+      onPause: pause,
+      onNext: next,
+      onPrevious: prev,
+    );
+
     player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed && !_loading) {
         _reachedEnd = true;
@@ -51,6 +61,16 @@ class SongService {
       } else {
         _collect();
       }
+      MediaControls.setPlaying(playing);
+    });
+
+    player.positionStream.listen((position) {
+      final total = player.duration;
+      if (total == null || total <= Duration.zero) return;
+      if (position.inSeconds == _pushedSecond) return;
+
+      _pushedSecond = position.inSeconds;
+      MediaControls.setPosition(position, total);
     });
   }
 
@@ -140,6 +160,7 @@ class SongService {
       await MusicLibrary.setSource(player, songs[_index]);
       if (stored.elapsed > Duration.zero) await player.seek(stored.elapsed);
       _tracked = songs[_index];
+      await MediaControls.setSong(songs[_index]);
     } catch (_) {
     } finally {
       _loading = false;
@@ -361,6 +382,7 @@ class SongService {
     try {
       await MusicLibrary.setSource(player, song);
       _tracked = song;
+      await MediaControls.setSong(song);
       await player.play();
     } catch (_) {
     } finally {

@@ -5,16 +5,21 @@ import 'package:just_audio/just_audio.dart';
 
 import '../data/library.dart';
 import '../data/play_history.dart';
+import '../data/settings_store.dart';
 import '../data/player_state_store.dart';
 import '../models/playback.dart';
 import '../models/song.dart';
+import 'audio_effects.dart';
 import 'media_controls.dart';
+import 'sleep_timer.dart';
 
 class SongService {
   static final SongService _instance = SongService._();
   factory SongService() => _instance;
 
-  final AudioPlayer player = AudioPlayer();
+  final AudioPlayer player = AudioPlayer(
+    audioPipeline: AudioEffects.pipeline,
+  );
 
   final List<Song> queue = [];
 
@@ -26,6 +31,7 @@ class SongService {
   bool _shuffle = false;
   RepeatMode _repeat = RepeatMode.off;
   double _volume = 1;
+  double _speed = 1;
 
   List<Song> _library = [];
 
@@ -51,7 +57,7 @@ class SongService {
     player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed && !_loading) {
         _reachedEnd = true;
-        next();
+        SleepTimer.songFinished(pause).then((_) => next());
       }
     });
 
@@ -250,6 +256,24 @@ class SongService {
       mode == RepeatMode.one ? LoopMode.one : LoopMode.off,
     );
     _modeController.add(null);
+  }
+
+  double get speed => _speed;
+
+  Future<void> setSpeed(double value) async {
+    _speed = value.clamp(0.25, 3.0);
+    await player.setSpeed(_speed);
+    await SettingsStore.setNumber(SettingsStore.speed, _speed);
+    _modeController.add(null);
+  }
+
+  Future<void> applySettings() async {
+    _speed = SettingsStore.number(SettingsStore.speed, 1);
+
+    try {
+      if (_speed != 1) await player.setSpeed(_speed);
+      await AudioEffects.restore();
+    } catch (_) {}
   }
 
   Future<void> nudgeVolume(double step) => setVolume(_volume + step);

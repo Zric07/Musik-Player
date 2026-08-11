@@ -13,6 +13,7 @@ import '../data/favorite_store.dart';
 import '../models/playback.dart';
 import '../models/song.dart';
 import '../services/playlist_service.dart';
+import '../services/sleep_timer.dart';
 import '../services/song_service.dart';
 import '../services/voice_commands.dart';
 import '../widgets/cover_art.dart';
@@ -344,6 +345,28 @@ class _CarDrivePageState extends State<CarDrivePage> {
       case VoiceAction.favorite:
         await _markFavorite();
 
+      case VoiceAction.sleep:
+        final minutes = VoiceCommands.minutesIn(command.query.isEmpty
+            ? _heard
+            : command.query);
+        SleepTimer.start(
+          Duration(minutes: minutes),
+          () => _songService.pause(),
+        );
+        _say('Timer auf $minutes Minuten');
+
+      case VoiceAction.faster:
+        await _songService.setSpeed(_songService.speed + 0.25);
+        _say('Tempo ${_songService.speed.toStringAsFixed(2)}x');
+
+      case VoiceAction.slower:
+        await _songService.setSpeed(_songService.speed - 0.25);
+        _say('Tempo ${_songService.speed.toStringAsFixed(2)}x');
+
+      case VoiceAction.normalSpeed:
+        await _songService.setSpeed(1);
+        _say('Normales Tempo');
+
       case VoiceAction.unknown:
         break;
     }
@@ -646,6 +669,9 @@ class _CarDrivePageState extends State<CarDrivePage> {
       'Zufall an',
       'Wiederholung aus',
       'Das gefällt mir',
+      'Timer 30 Minuten',
+      'Schneller',
+      'Langsamer',
     ];
 
     return Wrap(

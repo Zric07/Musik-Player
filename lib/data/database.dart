@@ -17,7 +17,7 @@ class AppDatabase {
     final database = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 5,
+        version: 6,
         onCreate: _create,
         onUpgrade: _upgrade,
       ),
@@ -32,6 +32,7 @@ class AppDatabase {
     if (from < 3) await _createState(db);
     if (from < 4) await _createFavorites(db);
     if (from < 5) await _createCache(db);
+    if (from < 6) await _createSettings(db);
   }
 
   static Future<void> _create(Database db, int version) async {
@@ -56,6 +57,16 @@ class AppDatabase {
     await _createState(db);
     await _createFavorites(db);
     await _createCache(db);
+    await _createSettings(db);
+  }
+
+  static Future<void> _createSettings(Database db) async {
+    await db.execute('''
+      CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _createCache(Database db) async {

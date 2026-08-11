@@ -5,6 +5,7 @@ import '../core/app_spacing.dart';
 import '../core/app_text.dart';
 import '../core/responsive.dart';
 import '../data/favorite_store.dart';
+import '../data/m3u.dart';
 import '../models/collection.dart';
 import '../models/playlist.dart';
 import '../models/song.dart';
@@ -79,6 +80,12 @@ class _LibraryPageState extends State<LibraryPage> {
                   const Expanded(
                     child: Text('Deine Bibliothek', style: AppText.title),
                   ),
+                  if (_tab == 0 && M3u.supported)
+                    SoftIconButton(
+                      icon: Icons.file_download_outlined,
+                      tooltip: 'M3U importieren',
+                      onPressed: _importPlaylist,
+                    ),
                   if (_tab == 0)
                     SoftIconButton(
                       icon: Icons.add_rounded,
@@ -330,9 +337,61 @@ class _LibraryPageState extends State<LibraryPage> {
         _changeCover(playlist);
       case PlaylistAction.removeCover:
         _removeCover(playlist);
+      case PlaylistAction.export:
+        _exportPlaylist(playlist);
       case PlaylistAction.delete:
         _confirmDelete(playlist);
     }
+  }
+
+  Future<void> _exportPlaylist(Playlist playlist) async {
+    final full = await _playlistService.getPlaylist(playlist.id);
+    final library = await _songService.getSongs();
+    final byId = {for (final song in library) song.id: song};
+
+    final songs = full.songs
+        .map((path) => byId[path])
+        .whereType<Song>()
+        .toList();
+
+    final done = await M3u.export(playlist.title, songs);
+    if (!mounted) return;
+
+    _notify(done ? 'Playlist exportiert' : 'Export abgebrochen');
+  }
+
+  Future<void> _importPlaylist() async {
+    final paths = await M3u.importPaths();
+    if (paths.isEmpty) {
+      if (mounted) _notify('Keine Titel in der Datei gefunden.');
+      return;
+    }
+
+    final library = await _songService.getSongs();
+    final byId = {for (final song in library) song.id: song};
+
+    final songs = paths.map((path) => byId[path]).whereType<Song>().toList();
+    if (songs.isEmpty) {
+      if (mounted) _notify('Keiner der Titel liegt auf diesem Gerät.');
+      return;
+    }
+
+    final title = 'Import ${DateTime.now().day}.${DateTime.now().month}';
+    await _playlistService.createPlaylist(title);
+
+    final playlists = await _playlistService.getPlaylists();
+    final created = playlists.firstWhere(
+      (item) => item.title == title,
+      orElse: () => playlists.last,
+    );
+
+    for (final song in songs) {
+      await _playlistService.addToPlaylist(created.id, song);
+    }
+
+    if (!mounted) return;
+    _notify('${songs.length} Titel importiert');
+    _reload();
   }
 
   Future<void> _changeCover(Playlist playlist) async {

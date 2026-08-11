@@ -9,9 +9,11 @@ import '../models/playback.dart';
 import '../models/playlist.dart';
 import '../models/song.dart';
 import '../services/playlist_service.dart';
+import '../services/smart_playlists.dart';
 import '../services/song_service.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/gradient_button.dart';
+import '../widgets/color_tile.dart';
 import '../widgets/hoverable.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/playback_builder.dart';
@@ -21,7 +23,9 @@ import '../widgets/song_actions.dart';
 import '../widgets/song_menu.dart';
 import '../widgets/song_tile.dart';
 import 'playlist_detail_page.dart';
+import 'collection_page.dart';
 import 'queue_page.dart';
+import 'settings_page.dart';
 import 'stats_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -82,6 +86,16 @@ class _HomePageState extends State<HomePage> {
             SliverPadding(
               padding: EdgeInsets.symmetric(horizontal: pad),
               sliver: const SliverToBoxAdapter(
+                child: SectionHeader(title: 'Für dich'),
+              ),
+            ),
+            SliverPadding(
+              padding: EdgeInsets.symmetric(horizontal: pad),
+              sliver: SliverToBoxAdapter(child: _buildSmart()),
+            ),
+            SliverPadding(
+              padding: EdgeInsets.symmetric(horizontal: pad),
+              sliver: const SliverToBoxAdapter(
                 child: SectionHeader(title: 'Alle Titel'),
               ),
             ),
@@ -121,6 +135,19 @@ class _HomePageState extends State<HomePage> {
               tooltip: _songService.importLabel,
               onPressed: _import,
             ),
+          SoftIconButton(
+            icon: Icons.swap_vert_rounded,
+            tooltip: 'Sortieren',
+            onPressed: _chooseOrder,
+          ),
+          SoftIconButton(
+            icon: Icons.tune_rounded,
+            tooltip: 'Einstellungen',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
+            ).then((_) => _load()),
+          ),
           SoftIconButton(
             icon: Icons.insights_outlined,
             tooltip: 'Deine Statistik',
@@ -166,6 +193,45 @@ class _HomePageState extends State<HomePage> {
               _ShortcutCard(playlist: shown[i], onTap: () => _open(shown[i])),
         );
       },
+    );
+  }
+
+  Widget _buildSmart() {
+    return SizedBox(
+      height: 92,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: SmartKind.values.length,
+        separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.md),
+        itemBuilder: (context, i) => _SmartCard(
+          kind: SmartKind.values[i],
+          onTap: () => _openSmart(SmartKind.values[i]),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSmart(SmartKind kind) async {
+    final library = await _songService.getSongs();
+    final collection = await SmartPlaylists.build(kind, library);
+
+    if (!mounted) return;
+
+    if (collection.songs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"${kind.title}" ist noch leer.')),
+      );
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => CollectionPage(
+          collection: collection,
+          kind: 'Auswahl',
+        ),
+      ),
     );
   }
 
@@ -322,6 +388,70 @@ class _HomePageState extends State<HomePage> {
         builder: (_) => PlaylistDetailPage(playlist: playlist),
       ),
     ).then((_) => _load());
+  }
+}
+
+class _SmartCard extends StatelessWidget {
+  final SmartKind kind;
+  final VoidCallback onTap;
+
+  const _SmartCard({super.key, required this.kind, required this.onTap});
+
+  static const _icons = {
+    SmartKind.recent: Icons.history_rounded,
+    SmartKind.mostPlayed: Icons.local_fire_department_rounded,
+    SmartKind.neglected: Icons.hourglass_bottom_rounded,
+    SmartKind.neverHeard: Icons.auto_awesome_rounded,
+    SmartKind.favorites: Icons.favorite_rounded,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Hoverable(
+      onTap: onTap,
+      builder: (context, hovered) {
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          width: 210,
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            color: hovered ? AppColors.surfaceTop : AppColors.surfaceHi,
+          ),
+          child: Row(
+            children: [
+              ColorTile(
+                seed: kind.title,
+                icon: _icons[kind] ?? Icons.queue_music_rounded,
+                size: 56,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      kind.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.itemTitle.copyWith(fontSize: 14),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      kind.hint,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.caption,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 

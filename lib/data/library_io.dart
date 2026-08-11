@@ -97,6 +97,7 @@ class MusicLibrary {
     Set<String> seen,
   ) async {
     if (depth > _maxDepth) return;
+    if (AppPaths.isExcluded(directory.path)) return;
     if (!await directory.exists()) return;
 
     final List<FileSystemEntity> entries;

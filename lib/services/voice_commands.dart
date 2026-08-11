@@ -15,6 +15,10 @@ enum VoiceAction {
   repeatOn,
   repeatOff,
   favorite,
+  sleep,
+  faster,
+  slower,
+  normalSpeed,
   unknown,
 }
 
@@ -86,6 +90,11 @@ class VoiceCommands {
       'lautstaerke runter', 'lautstaerke senken', 'lautstaerke reduzieren',
       'weniger lautstaerke'],
     ['gefaellt mir', 'favorit', 'merken', 'daumen hoch', 'zu favoriten'],
+    ['normale geschwindigkeit', 'normales tempo', 'geschwindigkeit normal'],
+    ['schneller', 'tempo hoch', 'geschwindigkeit erhoehen'],
+    ['langsamer', 'tempo runter', 'geschwindigkeit senken'],
+    ['schlaf', 'sleep', 'timer', 'ausmachen in', 'ausschalten in',
+      'abschalttimer'],
     ['zurueck', 'vorherig', 'davor', 'letztes lied', 'nochmal'],
     ['naechst', 'weiter', 'ueberspring', 'skip', 'vorwaerts', 'vor'],
   ];
@@ -101,6 +110,10 @@ class VoiceCommands {
     VoiceAction.louder,
     VoiceAction.quieter,
     VoiceAction.favorite,
+    VoiceAction.normalSpeed,
+    VoiceAction.faster,
+    VoiceAction.slower,
+    VoiceAction.sleep,
     VoiceAction.previous,
     VoiceAction.next,
   ];
@@ -124,6 +137,17 @@ class VoiceCommands {
         command.action == VoiceAction.playPlaylist;
 
     return needsName && command.query.length < 3;
+  }
+
+  static int minutesIn(String spoken) {
+    final text = normalize(spoken);
+
+    for (final word in text.split(' ')) {
+      final value = int.tryParse(word);
+      if (value != null && value > 0 && value <= 600) return value;
+    }
+
+    return 30;
   }
 
   static VoiceCommand parse(String spoken) {

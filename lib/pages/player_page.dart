@@ -11,6 +11,7 @@ import '../widgets/cover_art.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/hoverable.dart';
+import '../widgets/sleep_timer_sheet.dart';
 import 'queue_page.dart';
 
 class PlayerPage extends StatefulWidget {
@@ -98,6 +99,12 @@ class _PlayerPageState extends State<PlayerPage> {
               onPressed: () => setState(() => _showLyrics = !_showLyrics),
               size: 38,
             ),
+          SoftIconButton(
+            icon: Icons.bedtime_outlined,
+            tooltip: 'Sleep-Timer',
+            onPressed: () => showSleepTimerSheet(context),
+            size: 38,
+          ),
           SoftIconButton(
             icon: Icons.playlist_play_rounded,
             tooltip: 'Warteschlange',

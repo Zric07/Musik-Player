@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
 import '../core/app_text.dart';
+import '../data/m3u.dart';
 
-enum PlaylistAction { rename, changeCover, removeCover, delete }
+enum PlaylistAction { rename, changeCover, removeCover, export, delete }
 
 class PlaylistMenu extends StatelessWidget {
   final bool hasCover;
@@ -52,6 +53,14 @@ class PlaylistMenu extends StatelessWidget {
             ),
           ),
         const PopupMenuDivider(),
+        if (M3u.supported)
+          const PopupMenuItem(
+            value: PlaylistAction.export,
+            child: _Entry(
+              icon: Icons.ios_share_rounded,
+              label: 'Als M3U exportieren',
+            ),
+          ),
         const PopupMenuItem(
           value: PlaylistAction.delete,
           child: _Entry(

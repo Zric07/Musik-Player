@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'settings_store.dart';
+
 class AppPaths {
   AppPaths._();
 
@@ -34,6 +36,26 @@ class AppPaths {
   }
 
   static List<String> musicRoots() {
+    final chosen = SettingsStore.list(SettingsStore.scanRoots);
+    final roots = chosen.isNotEmpty ? chosen : defaultRoots();
+    final skipped = SettingsStore.list(SettingsStore.excluded);
+
+    return roots.where((root) => !skipped.contains(root)).toList();
+  }
+
+  static bool isExcluded(String path) {
+    final skipped = SettingsStore.list(SettingsStore.excluded);
+
+    for (final entry in skipped) {
+      if (path == entry) return true;
+      if (path.startsWith('$entry${Platform.pathSeparator}')) return true;
+      if (path.startsWith('$entry/')) return true;
+    }
+
+    return false;
+  }
+
+  static List<String> defaultRoots() {
     if (Platform.isAndroid) {
       return const [
         '/storage/emulated/0/Music',

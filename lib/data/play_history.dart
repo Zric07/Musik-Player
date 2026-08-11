@@ -123,6 +123,60 @@ class PlayHistory {
     });
   }
 
+  static Future<List<String>> recentPaths({int limit = 50}) async {
+    final db = await AppDatabase.instance();
+
+    final rows = await db.rawQuery('''
+      SELECT song_path, MAX(played_at) AS last
+      FROM plays
+      GROUP BY song_path
+      ORDER BY last DESC
+      LIMIT ?
+    ''', [limit]);
+
+    return rows.map((row) => row['song_path'] as String).toList();
+  }
+
+  static Future<List<String>> mostPlayedPaths({int limit = 50}) async {
+    final db = await AppDatabase.instance();
+
+    final rows = await db.rawQuery('''
+      SELECT song_path, COUNT(*) AS plays, SUM(seconds) AS seconds
+      FROM plays
+      GROUP BY song_path
+      ORDER BY plays DESC, seconds DESC
+      LIMIT ?
+    ''', [limit]);
+
+    return rows.map((row) => row['song_path'] as String).toList();
+  }
+
+  static Future<Set<String>> heardPaths() async {
+    final db = await AppDatabase.instance();
+    final rows = await db.rawQuery('SELECT DISTINCT song_path FROM plays');
+
+    return rows.map((row) => row['song_path'] as String).toSet();
+  }
+
+  static Future<List<String>> neglectedPaths({
+    int limit = 50,
+    Duration olderThan = const Duration(days: 30),
+  }) async {
+    final db = await AppDatabase.instance();
+    final cutoff = DateTime.now().subtract(olderThan).millisecondsSinceEpoch;
+
+    final rows = await db.rawQuery('''
+      SELECT song_path, MAX(played_at) AS last
+      FROM plays
+      GROUP BY song_path
+      HAVING last < ?
+      ORDER BY last ASC
+      LIMIT ?
+    ''', [cutoff, limit]);
+
+    return rows.map((row) => row['song_path'] as String).toList();
+  }
+
   static Future<void> clear() async {
     final db = await AppDatabase.instance();
     await db.delete('plays');

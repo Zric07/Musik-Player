@@ -4,6 +4,7 @@ import '../core/app_colors.dart';
 import '../core/app_spacing.dart';
 import '../core/app_text.dart';
 import '../data/favorite_store.dart';
+import '../data/settings_store.dart';
 import '../services/permission_service.dart';
 import '../services/song_service.dart';
 import 'app_shell.dart';
@@ -40,7 +41,10 @@ class _BootstrapPageState extends State<BootstrapPage> {
       throw const _PermissionDenied();
     }
     await LibraryPermission.ensureNotifications();
+    await SettingsStore.load();
     await FavoriteStore.load();
+
+    await SongService().applySettings();
 
     final songs = await SongService().refresh(onProgress: _onProgress);
     await SongService().restore(songs);

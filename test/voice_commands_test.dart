@@ -73,6 +73,23 @@ void main() {
     });
   });
 
+  group('Neue Befehle', () {
+    test('Sleep-Timer mit Minuten', () {
+      expect(VoiceCommands.parse('Timer 30 Minuten').action, VoiceAction.sleep);
+      expect(VoiceCommands.minutesIn('Timer 45 Minuten'), 45);
+      expect(VoiceCommands.minutesIn('Sleep Timer'), 30);
+    });
+
+    test('Geschwindigkeit', () {
+      expect(VoiceCommands.parse('schneller').action, VoiceAction.faster);
+      expect(VoiceCommands.parse('langsamer').action, VoiceAction.slower);
+      expect(
+        VoiceCommands.parse('normale Geschwindigkeit').action,
+        VoiceAction.normalSpeed,
+      );
+    });
+  });
+
   group('findSong', () {
     final songs = [
       const Song(id: '1', title: 'Bohemian Rhapsody', artist: 'Queen'),

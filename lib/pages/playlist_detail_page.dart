@@ -7,6 +7,7 @@ import '../core/app_spacing.dart';
 import '../core/app_text.dart';
 import '../core/formatting.dart';
 import '../core/responsive.dart';
+import '../data/m3u.dart';
 import '../models/playlist.dart';
 import '../models/song.dart';
 import '../services/cover_picker.dart';
@@ -287,9 +288,18 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         _changeCover();
       case PlaylistAction.removeCover:
         _removeCover();
+      case PlaylistAction.export:
+        _export();
       case PlaylistAction.delete:
         _confirmDelete();
     }
+  }
+
+  Future<void> _export() async {
+    final done = await M3u.export(_playlist.title, _songs);
+    if (!mounted) return;
+
+    _notify(done ? 'Playlist exportiert' : 'Export abgebrochen');
   }
 
   Future<void> _rename() async {

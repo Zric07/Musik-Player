@@ -363,8 +363,8 @@ class SongService {
     return refresh();
   }
 
-  Future<List<Song>> refresh() async {
-    _library = await MusicLibrary.load();
+  Future<List<Song>> refresh({void Function(int)? onProgress}) async {
+    _library = await MusicLibrary.load(onProgress: onProgress);
     return _library;
   }
 

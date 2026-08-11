@@ -18,10 +18,20 @@ class BootstrapPage extends StatefulWidget {
 class _BootstrapPageState extends State<BootstrapPage> {
   late Future<void> _startup;
 
+  int _found = 0;
+
   @override
   void initState() {
     super.initState();
     _startup = _prepare();
+  }
+
+  void _onProgress(int count) {
+    if (!mounted) return;
+    if (count == _found) return;
+    if (count % 25 != 0) return;
+
+    setState(() => _found = count);
   }
 
   Future<void> _prepare() async {
@@ -32,7 +42,7 @@ class _BootstrapPageState extends State<BootstrapPage> {
     await LibraryPermission.ensureNotifications();
     await FavoriteStore.load();
 
-    final songs = await SongService().refresh();
+    final songs = await SongService().refresh(onProgress: _onProgress);
     await SongService().restore(songs);
   }
 
@@ -48,7 +58,7 @@ class _BootstrapPageState extends State<BootstrapPage> {
       future: _startup,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const _Splash();
+          return _Splash(found: _found);
         }
 
         if (snapshot.hasError) {
@@ -75,7 +85,9 @@ class _PermissionDenied implements Exception {
 }
 
 class _Splash extends StatelessWidget {
-  const _Splash({super.key});
+  final int found;
+
+  const _Splash({super.key, this.found = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +112,12 @@ class _Splash extends StatelessWidget {
             const SizedBox(height: AppSpacing.xl),
             const Text('Miply', style: AppText.section),
             const SizedBox(height: AppSpacing.sm),
-            const Text('Bibliothek wird gelesen', style: AppText.itemSubtitle),
+            Text(
+              found == 0
+                  ? 'Bibliothek wird gelesen'
+                  : '$found Titel gefunden',
+              style: AppText.itemSubtitle,
+            ),
             const SizedBox(height: AppSpacing.xl),
             const SizedBox(
               width: 22,

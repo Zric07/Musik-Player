@@ -17,7 +17,7 @@ class AppDatabase {
     final database = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 4,
+        version: 5,
         onCreate: _create,
         onUpgrade: _upgrade,
       ),
@@ -31,6 +31,7 @@ class AppDatabase {
     if (from < 2) await _createPlays(db);
     if (from < 3) await _createState(db);
     if (from < 4) await _createFavorites(db);
+    if (from < 5) await _createCache(db);
   }
 
   static Future<void> _create(Database db, int version) async {
@@ -54,6 +55,24 @@ class AppDatabase {
     await _createPlays(db);
     await _createState(db);
     await _createFavorites(db);
+    await _createCache(db);
+  }
+
+  static Future<void> _createCache(Database db) async {
+    await db.execute('''
+      CREATE TABLE song_cache (
+        path     TEXT PRIMARY KEY,
+        title    TEXT NOT NULL,
+        artist   TEXT NOT NULL,
+        album    TEXT NOT NULL,
+        cover    TEXT NOT NULL,
+        duration INTEGER NOT NULL,
+        lyrics   TEXT NOT NULL,
+        timed    TEXT NOT NULL,
+        modified INTEGER NOT NULL,
+        size     INTEGER NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _createFavorites(Database db) async {

@@ -8,6 +8,7 @@ import '../models/song.dart';
 import 'app_paths.dart';
 import 'audio_formats.dart';
 import 'id3_reader.dart';
+import 'song_cache.dart';
 
 class MusicLibrary {
   MusicLibrary._();
@@ -35,25 +36,65 @@ class MusicLibrary {
     );
   }
 
-  static Future<List<Song>> load() async {
+  static Future<List<Song>> load({void Function(int)? onProgress}) async {
     final artwork = await AppPaths.artwork();
-    final songs = <Song>[];
+    final files = <File>[];
     final seen = <String>{};
 
     for (final root in AppPaths.musicRoots()) {
-      await _walk(Directory(root), 0, songs, seen, artwork);
+      await _walk(Directory(root), 0, files, seen);
     }
+
+    final cache = await SongCache.load();
+    final songs = <Song>[];
+    final fresh = <CachedSong>[];
+
+    for (final file in files) {
+      final stat = await _statOf(file);
+      final cached = cache[file.path];
+
+      if (cached != null &&
+          stat != null &&
+          cached.modified == stat.modified.millisecondsSinceEpoch &&
+          cached.size == stat.size) {
+        songs.add(cached.song);
+        onProgress?.call(songs.length);
+        continue;
+      }
+
+      final song = await _readSong(file, artwork);
+      songs.add(song);
+      onProgress?.call(songs.length);
+
+      if (stat != null) {
+        fresh.add(
+          CachedSong(song, stat.modified.millisecondsSinceEpoch, stat.size),
+        );
+      }
+    }
+
+    final gone = cache.keys.where((path) => !seen.contains(path)).toList();
+
+    await SongCache.save(fresh);
+    await SongCache.forget(gone);
 
     songs.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
     return songs;
   }
 
+  static Future<FileStat?> _statOf(File file) async {
+    try {
+      return await file.stat();
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> _walk(
     Directory directory,
     int depth,
-    List<Song> songs,
+    List<File> files,
     Set<String> seen,
-    Directory artwork,
   ) async {
     if (depth > _maxDepth) return;
     if (!await directory.exists()) return;
@@ -70,7 +111,7 @@ class MusicLibrary {
       if (name.startsWith('.')) continue;
 
       if (entry is Directory) {
-        await _walk(entry, depth + 1, songs, seen, artwork);
+        await _walk(entry, depth + 1, files, seen);
         continue;
       }
 
@@ -78,7 +119,7 @@ class MusicLibrary {
       if (!AudioFormats.supports(p.extension(entry.path))) continue;
       if (!seen.add(entry.path)) continue;
 
-      songs.add(await _readSong(entry, artwork));
+      files.add(entry);
     }
   }
 

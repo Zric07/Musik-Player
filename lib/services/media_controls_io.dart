@@ -25,7 +25,7 @@ class MediaControls {
         androidStopForegroundOnPause: false,
         androidNotificationClickStartsActivity: true,
         notificationColor: const Color(0xFFE23E4E),
-        preloadArtwork: true,
+        preloadArtwork: false,
       );
       return;
     }

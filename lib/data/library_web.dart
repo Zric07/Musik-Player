@@ -19,7 +19,8 @@ class MusicLibrary {
 
   static String get importLabel => 'Musik auswählen';
 
-  static Future<List<Song>> load() async => List.of(_songs);
+  static Future<List<Song>> load({void Function(int)? onProgress}) async =>
+      List.of(_songs);
 
   static Future<int> import() async {
     final group = XTypeGroup(

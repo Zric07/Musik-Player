@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide RepeatMode;
+import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
@@ -26,18 +27,28 @@ class CarDrivePage extends StatefulWidget {
 }
 
 class _CarDrivePageState extends State<CarDrivePage> {
-  static const _settleDelay = Duration(milliseconds: 550);
-  static const _retryDelay = Duration(milliseconds: 250);
+  static const _settleDelay = Duration(milliseconds: 750);
+  static const _cooldown = Duration(milliseconds: 800);
+  static const _minConfidence = 0.3;
+  static const _watchdog = Duration(seconds: 3);
 
   final _speech = stt.SpeechToText();
   final _songService = SongService();
 
   Timer? _settle;
-  Timer? _retry;
+  Timer? _restart;
+  Timer? _watch;
+
+  AppLifecycleListener? _lifecycle;
 
   bool _wanted = false;
   bool _blocked = false;
-  bool _busy = false;
+  bool _starting = false;
+  bool _running = false;
+  bool _paused = false;
+  bool _listenLocked = true;
+
+  int _failures = 0;
 
   String _locale = 'de_DE';
   String _heard = '';
@@ -47,7 +58,34 @@ class _CarDrivePageState extends State<CarDrivePage> {
   @override
   void initState() {
     super.initState();
+
+    _lifecycle = AppLifecycleListener(
+      onHide: _sleep,
+      onPause: _sleep,
+      onShow: _wake,
+      onRestart: _wake,
+    );
+
     if (widget.active) _start();
+  }
+
+  void _sleep() {
+    if (!_wanted) return;
+    if (widget.active && _listenLocked) return;
+
+    _paused = true;
+    unawaited(_stop());
+  }
+
+  void _wake() {
+    if (!_paused) return;
+    _paused = false;
+    if (widget.active) unawaited(_start());
+  }
+
+  void _setListenLocked(bool value) {
+    setState(() => _listenLocked = value);
+    if (!value && !widget.active) unawaited(_stop());
   }
 
   @override
@@ -60,8 +98,10 @@ class _CarDrivePageState extends State<CarDrivePage> {
   @override
   void dispose() {
     _wanted = false;
+    _lifecycle?.dispose();
     _settle?.cancel();
-    _retry?.cancel();
+    _restart?.cancel();
+    _watch?.cancel();
     _speech.cancel();
     super.dispose();
   }
@@ -72,11 +112,8 @@ class _CarDrivePageState extends State<CarDrivePage> {
     var available = false;
     try {
       available = await _speech.initialize(
-        onStatus: (_) => _keepAlive(),
-        onError: (error) {
-          _say('Erkennung unterbrochen (${error.errorMsg}).');
-          _keepAlive();
-        },
+        onStatus: _onStatus,
+        onError: _onError,
       );
     } catch (_) {
       available = false;
@@ -100,8 +137,48 @@ class _CarDrivePageState extends State<CarDrivePage> {
       _heard = '';
     });
 
-    _retry = Timer.periodic(_retryDelay, (_) => _listen());
-    await _listen();
+    _watch = Timer.periodic(_watchdog, (_) => _schedule());
+    _schedule(const Duration(milliseconds: 120));
+  }
+
+  void _onStatus(String status) {
+    if (status == 'listening') return;
+    _schedule();
+  }
+
+  void _onError(SpeechRecognitionError error) {
+    final message = error.errorMsg;
+    _failures++;
+
+    if (message.contains('busy')) {
+      unawaited(_speech.cancel());
+    } else if (message.contains('permission')) {
+      _say('Kein Zugriff auf das Mikrofon.');
+    } else if (_isHarmless(message)) {
+      _failures = 0;
+    } else {
+      _say('Erkennung unterbrochen ($message).');
+    }
+
+    _schedule(_backoff);
+  }
+
+  bool _isHarmless(String message) {
+    const quiet = ['no_match', 'speech_timeout', 'client', 'canceled'];
+    return quiet.any(message.contains);
+  }
+
+  Duration get _backoff {
+    final steps = _failures.clamp(1, 6);
+    return Duration(milliseconds: 500 * steps);
+  }
+
+  void _schedule([Duration? delay]) {
+    if (!_wanted || !mounted) return;
+    if (_speech.isListening || _starting) return;
+
+    _restart?.cancel();
+    _restart = Timer(delay ?? _cooldown, _listen);
   }
 
   Future<String> _pickLocale() async {
@@ -119,24 +196,23 @@ class _CarDrivePageState extends State<CarDrivePage> {
   }
 
   Future<void> _stop() async {
+    if (!_wanted) return;
     _wanted = false;
-    _retry?.cancel();
+    _restart?.cancel();
+    _watch?.cancel();
     _settle?.cancel();
 
     await _speech.cancel();
     if (mounted) setState(() {});
   }
 
-  void _keepAlive() {
-    if (!_wanted || !mounted) return;
-    if (!_speech.isListening) unawaited(_listen());
-  }
-
   Future<void> _listen() async {
     if (!_wanted || !mounted) return;
-    if (_speech.isListening || _busy) return;
+    if (_speech.isListening || _starting) return;
 
-    _busy = true;
+    _starting = true;
+    _lastHandled = '';
+
     try {
       await _speech.listen(
         onResult: _onResult,
@@ -144,14 +220,18 @@ class _CarDrivePageState extends State<CarDrivePage> {
           localeId: _locale,
           partialResults: true,
           cancelOnError: false,
-          listenMode: stt.ListenMode.dictation,
+          listenMode: stt.ListenMode.confirmation,
           pauseFor: const Duration(seconds: 2),
-          listenFor: const Duration(minutes: 2),
+          listenFor: const Duration(seconds: 30),
         ),
       );
+      _failures = 0;
     } catch (_) {
+      _failures++;
+      await _speech.cancel();
+      _schedule(_backoff);
     } finally {
-      _busy = false;
+      _starting = false;
     }
 
     if (mounted) setState(() {});
@@ -162,8 +242,10 @@ class _CarDrivePageState extends State<CarDrivePage> {
     if (!mounted) return;
 
     setState(() => _heard = words);
-
     _settle?.cancel();
+
+    if (VoiceCommands.isIncomplete(words)) return;
+    if (!_trustworthy(result)) return;
 
     if (result.finalResult) {
       _run(words);
@@ -173,84 +255,128 @@ class _CarDrivePageState extends State<CarDrivePage> {
     _settle = Timer(_settleDelay, () => _run(words));
   }
 
+  bool _trustworthy(SpeechRecognitionResult result) {
+    if (!result.finalResult) return true;
+    if (result.confidence <= 0) return true;
+    return result.confidence >= _minConfidence;
+  }
+
   Future<void> _run(String spoken) async {
     final text = VoiceCommands.normalize(spoken);
-    if (text.isEmpty || text == _lastHandled) return;
-
-    _lastHandled = text;
-    _settle?.cancel();
+    if (text.isEmpty || text == _lastHandled || _running) return;
 
     final command = VoiceCommands.parse(spoken);
+    if (command.action == VoiceAction.unknown) {
+      _lastHandled = text;
+      return;
+    }
 
+    _lastHandled = text;
+    _running = true;
+    _settle?.cancel();
+
+    try {
+      await _apply(command);
+    } catch (_) {
+      _say('Das hat nicht geklappt.');
+    } finally {
+      _running = false;
+    }
+
+    await _speech.cancel();
+    _schedule(_cooldown);
+  }
+
+  Future<void> _apply(VoiceCommand command) async {
     switch (command.action) {
       case VoiceAction.play:
-        await _playByName(command.query);
+        _say('Suche "${command.query}" …');
+        await _playByName(command.query, minScore: 0);
 
       case VoiceAction.playPlaylist:
+        _say('Suche Playlist …');
         await _playPlaylist(command.query);
 
       case VoiceAction.resume:
-        await _songService.resume();
         _say('Weiter');
+        await _resumeOrStart();
 
       case VoiceAction.pause:
-        await _songService.pause();
         _say('Pause');
+        await _songService.pause();
 
       case VoiceAction.next:
-        await _songService.next();
         _say('Nächster Titel');
+        await _songService.next();
 
       case VoiceAction.previous:
-        await _songService.prev();
         _say('Vorheriger Titel');
+        await _songService.prev();
 
       case VoiceAction.restart:
-        await _songService.restartSong();
         _say('Von vorne');
+        await _songService.restartSong();
 
       case VoiceAction.louder:
-        await _songService.nudgeVolume(0.15);
         _say('Lauter');
+        await _songService.nudgeVolume(0.15);
 
       case VoiceAction.quieter:
-        await _songService.nudgeVolume(-0.15);
         _say('Leiser');
+        await _songService.nudgeVolume(-0.15);
 
       case VoiceAction.shuffleOn:
-        await _songService.setShuffle(true);
         _say('Zufall an');
+        await _songService.setShuffle(true);
 
       case VoiceAction.shuffleOff:
-        await _songService.setShuffle(false);
         _say('Zufall aus');
+        await _songService.setShuffle(false);
 
       case VoiceAction.repeatOn:
-        await _songService.setRepeat(RepeatMode.all);
         _say('Wiederholung an');
+        await _songService.setRepeat(RepeatMode.all);
 
       case VoiceAction.repeatOff:
-        await _songService.setRepeat(RepeatMode.off);
         _say('Wiederholung aus');
+        await _songService.setRepeat(RepeatMode.off);
 
       case VoiceAction.favorite:
         await _markFavorite();
 
       case VoiceAction.unknown:
-        await _playByName(text);
+        break;
     }
-
-    Future<void>.delayed(const Duration(seconds: 2), () {
-      _lastHandled = '';
-    });
   }
 
-  Future<void> _playByName(String query) async {
+  Future<void> _resumeOrStart() async {
+    if (_songService.current != null) {
+      await _songService.resume();
+      return;
+    }
+
     final songs = await _songService.getSongs();
-    final song = VoiceCommands.findSong(songs, query);
+    if (songs.isEmpty) {
+      _say('Ich habe keine Musik auf dem Gerät gefunden.');
+      return;
+    }
+
+    await _songService.playList(songs, 0);
+    _say('Spiele "${songs.first.title}"');
+  }
+
+  Future<void> _playByName(String query, {required double minScore}) async {
+    final songs = await _songService.getSongs();
+
+    if (songs.isEmpty) {
+      _say('Ich habe keine Musik auf dem Gerät gefunden.');
+      return;
+    }
+
+    final song = VoiceCommands.findSong(songs, query, minScore: minScore);
 
     if (song == null) {
-      _say('Ich habe keine Musik auf dem Gerät gefunden.');
+      _say('Das habe ich nicht verstanden.');
       return;
     }
 
@@ -314,6 +440,7 @@ class _CarDrivePageState extends State<CarDrivePage> {
     setState(() => _feedback = message);
   }
 
+
   Future<void> _toggle() async {
     if (_wanted) {
       await _stop();
@@ -356,7 +483,9 @@ class _CarDrivePageState extends State<CarDrivePage> {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.xl),
+            const SizedBox(height: AppSpacing.lg),
+            _buildLockSwitch(),
+            const SizedBox(height: AppSpacing.md),
             _buildTranscript(),
             const SizedBox(height: AppSpacing.xl),
             _buildNowPlaying(),
@@ -373,7 +502,8 @@ class _CarDrivePageState extends State<CarDrivePage> {
   String get _statusLabel {
     if (_blocked) return 'Mikrofon nicht verfügbar';
     if (!_wanted) return 'Mikrofon pausiert';
-    return _speech.isListening ? 'Ich höre zu …' : 'Starte Mikrofon …';
+    if (_running) return 'Verstanden …';
+    return _speech.isListening ? 'Ich höre zu …' : 'Einen Moment …';
   }
 
   Widget _buildMicButton() {
@@ -403,6 +533,23 @@ class _CarDrivePageState extends State<CarDrivePage> {
           size: 54,
           color: _wanted ? AppColors.onAccent : AppColors.textDim,
         ),
+      ),
+    );
+  }
+
+  Widget _buildLockSwitch() {
+    return SwitchListTile(
+      value: _listenLocked,
+      onChanged: _setListenLocked,
+      contentPadding: EdgeInsets.zero,
+      activeThumbColor: AppColors.accent,
+      title: const Text(
+        'Bei gesperrtem Bildschirm weiterhören',
+        style: AppText.itemTitle,
+      ),
+      subtitle: const Text(
+        'Braucht mehr Akku. Gilt nur, solange Cardrive offen ist.',
+        style: AppText.itemSubtitle,
       ),
     );
   }
@@ -494,8 +641,8 @@ class _CarDrivePageState extends State<CarDrivePage> {
       'Weiter',
       'Zurück',
       'Von vorne',
-      'Lauter',
-      'Leiser',
+      'Lautstärke erhöhen',
+      'Lautstärke senken',
       'Zufall an',
       'Wiederholung aus',
       'Das gefällt mir',

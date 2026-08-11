@@ -29,6 +29,7 @@ class _BootstrapPageState extends State<BootstrapPage> {
     if (!granted) {
       throw const _PermissionDenied();
     }
+    await LibraryPermission.ensureNotifications();
     await FavoriteStore.load();
 
     final songs = await SongService().refresh();

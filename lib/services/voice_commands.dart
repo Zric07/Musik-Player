@@ -79,8 +79,12 @@ class VoiceCommands {
     ['zufall', 'zufaellig', 'shuffle', 'mischen', 'misch', 'durcheinander'],
     ['wiederholung aus', 'keine wiederholung', 'schleife aus', 'loop aus'],
     ['wiederhol', 'schleife', 'loop', 'endlos'],
-    ['lauter', 'mach lauter', 'volle lautstaerke', 'voll aufdrehen'],
-    ['leiser', 'mach leiser', 'leise'],
+    ['lauter', 'mach lauter', 'lauter machen', 'lautstaerke hoch',
+      'lautstaerke erhoehen', 'volle lautstaerke', 'voll aufdrehen',
+      'mehr lautstaerke'],
+    ['leiser', 'mach leiser', 'leiser machen', 'leise', 'ganz leise',
+      'lautstaerke runter', 'lautstaerke senken', 'lautstaerke reduzieren',
+      'weniger lautstaerke'],
     ['gefaellt mir', 'favorit', 'merken', 'daumen hoch', 'zu favoriten'],
     ['zurueck', 'vorherig', 'davor', 'letztes lied', 'nochmal'],
     ['naechst', 'weiter', 'ueberspring', 'skip', 'vorwaerts', 'vor'],
@@ -100,6 +104,27 @@ class VoiceCommands {
     VoiceAction.previous,
     VoiceAction.next,
   ];
+
+  static bool isIncomplete(String spoken) {
+    final text = normalize(spoken);
+    if (text.isEmpty) return true;
+    if (text.length < 3) return true;
+
+    if (_playPrefixes.contains(text)) return true;
+    if (_playlistPrefixes.contains(text)) return true;
+    if (_fillers.contains(text)) return true;
+
+    for (final prefix in _playPrefixes) {
+      if (text != '$prefix das' && text != '$prefix den') continue;
+      return true;
+    }
+
+    final command = parse(text);
+    final needsName = command.action == VoiceAction.play ||
+        command.action == VoiceAction.playPlaylist;
+
+    return needsName && command.query.length < 3;
+  }
 
   static VoiceCommand parse(String spoken) {
     final text = normalize(spoken);
@@ -173,11 +198,15 @@ class VoiceCommands {
     return text.substring(0, text.length - suffix.length).trim();
   }
 
-  static Song? findSong(List<Song> songs, String query) {
+  static Song? findSong(
+    List<Song> songs,
+    String query, {
+    double minScore = 0,
+  }) {
     if (songs.isEmpty) return null;
 
     final needle = normalize(query);
-    if (needle.isEmpty) return songs.first;
+    if (needle.isEmpty) return minScore > 0 ? null : songs.first;
 
     var best = songs.first;
     var bestScore = -1.0;
@@ -190,7 +219,7 @@ class VoiceCommands {
       }
     }
 
-    return best;
+    return bestScore >= minScore ? best : null;
   }
 
   static double _score(Song song, String needle) {

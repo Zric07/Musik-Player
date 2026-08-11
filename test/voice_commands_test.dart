@@ -46,6 +46,33 @@ void main() {
     });
   });
 
+  group('isIncomplete', () {
+    test('ignoriert angefangene Sätze', () {
+      expect(VoiceCommands.isIncomplete('spiele'), isTrue);
+      expect(VoiceCommands.isIncomplete('spiele a'), isTrue);
+      expect(VoiceCommands.isIncomplete('starte das'), isTrue);
+      expect(VoiceCommands.isIncomplete('pa'), isTrue);
+    });
+
+    test('lässt vollständige Befehle durch', () {
+      expect(VoiceCommands.isIncomplete('pause'), isFalse);
+      expect(VoiceCommands.isIncomplete('spiele africa ab'), isFalse);
+      expect(VoiceCommands.isIncomplete('lautstärke senken'), isFalse);
+    });
+  });
+
+  group('Lautstärke', () {
+    test('erkennt beide Richtungen', () {
+      expect(VoiceCommands.parse('lautstärke erhöhen').action,
+          VoiceAction.louder);
+      expect(VoiceCommands.parse('lautstärke senken').action,
+          VoiceAction.quieter);
+      expect(VoiceCommands.parse('ganz leise').action, VoiceAction.quieter);
+      expect(
+          VoiceCommands.parse('volle lautstärke').action, VoiceAction.louder);
+    });
+  });
+
   group('findSong', () {
     final songs = [
       const Song(id: '1', title: 'Bohemian Rhapsody', artist: 'Queen'),
@@ -72,6 +99,17 @@ void main() {
 
     test('spielt notfalls den ähnlichsten Titel', () {
       expect(VoiceCommands.findSong(songs, 'zzzz'), isNotNull);
+    });
+
+    test('lehnt bei Mindestgüte ab', () {
+      expect(
+        VoiceCommands.findSong(songs, 'wie ist das wetter', minScore: 0.34),
+        isNull,
+      );
+      expect(
+        VoiceCommands.findSong(songs, 'afrika', minScore: 0.34)?.id,
+        '2',
+      );
     });
 
     test('gibt null ohne Musik', () {

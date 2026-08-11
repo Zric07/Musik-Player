@@ -18,6 +18,24 @@ class LibraryPermission {
     return storage.isGranted;
   }
 
+  static Future<void> ensureNotifications() async {
+    if (!Platform.isAndroid) return;
+
+    try {
+      if (await Permission.notification.isGranted) return;
+      await Permission.notification.request();
+    } catch (_) {}
+  }
+
+  static Future<void> ensureMicrophone() async {
+    if (!Platform.isAndroid) return;
+
+    try {
+      if (await Permission.microphone.isGranted) return;
+      await Permission.microphone.request();
+    } catch (_) {}
+  }
+
   static Future<bool> isPermanentlyDenied() async {
     if (!Platform.isAndroid) return false;
     return await Permission.audio.isPermanentlyDenied &&
